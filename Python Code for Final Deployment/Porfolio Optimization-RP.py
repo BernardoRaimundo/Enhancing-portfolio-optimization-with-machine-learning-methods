@@ -33,7 +33,7 @@ def import_commodity_data(tickers: list, start_date: str, end_date: str) -> dict
         
         "Energy": ["CL=F", "NG=F", "HO=F", "RB=F", 'BZ=F'],
         "Metals - Precious": ["GC=F", "SI=F", "PA=F", "PL=F"],
-        "Metals - Base": ["HG=F", 'ZN=F'], #, "TIO=F"],  
+        "Metals - Base": ["HG=F", 'ZN=F'],  
         "Agriculture": ["ZW=F", "ZC=F", "ZS=F", "CC=F", 'ZR=F', 'ZO=F', 'GDK=F','DY=F', 'CB=F', 'GNF=F'],
         "Livestock": ["HE=F", "LE=F", "GF=F"],
         "Softs": ["SB=F", "KC=F", "CT=F"],
@@ -802,104 +802,6 @@ def risk_parity(returns_data: pd.DataFrame,
     
     return final_results_df, median_results, portfolios_data, mvo_weights_history
 
-
-
-#%%
-
-## Importing Data
-start_date, end_date = get_dates()
-data, commodity_data, commodity_dict = import_commodity_data(tickers, start_date, end_date)
-
-
-## Storing data into dataframe
-all_data_df = pd.DataFrame()
- 
-for category, df in data.items():
-    if all_data_df.empty:
-        all_data_df = df
-    else:
-        all_data_df = pd.concat([all_data_df, df], axis=1)
-
-
-# Performance Metrics
-returns, returns_df_daily = compute_returns(data = data, frequency = 'daily')
-returns_monthly, returns_df_monthly = compute_returns(data = data, frequency = 'monthly')
-correlation_matrix = calculate_correlation_matrix(returns_data = returns)
-plot_bell_curves(returns_monthly, title='Empirical Distributions of Monthly Commodity Futures', figsize=(14, 10))
-
-
-
-
-
-
-
-
-# # Risk Parity
-risk_parity_results, risk_parity_final_results, portfolios_risk_parity, risk_parity_weigths = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 3, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = False,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
-
-
-
-risk_parity_results1, risk_parity_final_results1, portfolios_risk_parity1, risk_parity_weigths1 = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 3, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = True,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
-
-
-
-risk_parity_results2, risk_parity_final_results2, portfolios_risk_parity2, risk_parity_weigths2 = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 5, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = False,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
-
-
-
-risk_parity_results3, risk_parity_final_results3, portfolios_risk_parity3, risk_parity_weigths3 = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 5, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = True,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
-
-
-
-
-risk_parity_results4, risk_parity_final_results4, portfolios_risk_parity4, risk_parity_weigths4 = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 7, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = False,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
-
-
-
-
-risk_parity_results5, risk_parity_final_results5, portfolios_risk_parity5, risk_parity_weigths5 = risk_parity(returns_data = returns_df_daily, 
-                                                                                                          num_portfolios = 100, 
-                                                                                                          num_securities = 10, 
-                                                                                                          window_years = 7, 
-                                                                                                          frequency = "daily", 
-                                                                                                          allow_short_selling = True,
-                                                                                                          seed = 123,
-                                                                                                          rebalance_frequency = 'six_months')
 
 
 

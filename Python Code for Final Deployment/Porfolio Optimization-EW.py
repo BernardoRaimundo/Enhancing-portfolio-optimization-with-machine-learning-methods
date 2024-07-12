@@ -4,14 +4,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import yfinance as yf
-import scipy.optimize as optimize
 from tqdm import tqdm
 import warnings
 import seaborn as sns
 import tkinter as tk
 from tkinter import simpledialog
 warnings.simplefilter(action='ignore', category=FutureWarning)
-sns.set(style="whitegrid", palette="husl")
 
 #%% Download data from Yahoo Finance
 
@@ -36,7 +34,7 @@ def import_commodity_data(tickers: list, start_date: str, end_date: str) -> dict
         
         "Energy": ["CL=F", "NG=F", "HO=F", "RB=F", 'BZ=F'],
         "Metals - Precious": ["GC=F", "SI=F", "PA=F", "PL=F"],
-        "Metals - Base": ["HG=F", 'ZN=F'], 
+        "Metals - Base": ["HG=F", 'ZN=F'],  
         "Agriculture": ["ZW=F", "ZC=F", "ZS=F", "CC=F", 'ZR=F', 'ZO=F', 'GDK=F','DY=F', 'CB=F', 'GB=F', 'GNF=F'],
         "Livestock": ["HE=F", "LE=F", "GF=F"],
         "Softs": ["SB=F", "KC=F", "CT=F"],
@@ -106,7 +104,7 @@ tickers = [
     
     
     # Agriculture Commodities
-
+    
     "ZW=F",  # Wheat
     "ZC=F",  # Corn
     "ZS=F",  # Soybeans
@@ -130,7 +128,7 @@ tickers = [
     "KC=F",  # Coffee
     "CT=F",  # Cotton
     
-    # ETFs
+    # # ETFs
     
     "DBB",  # Invesco DB Base Metals Fund (eposure to aluminum, zinc, and copper)
     "USO",  # United States Oil Fund, LP (exposure oil)
@@ -249,6 +247,10 @@ def calculate_correlation_matrix(returns_data: dict) -> pd.DataFrame:
     return correlation_matrix
 
 
+
+# Set Seaborn style
+sns.set(style="whitegrid", palette="husl")
+
 # Aggregating metrics
 def calculate_mean_std(data):
     
@@ -304,7 +306,9 @@ def plot_bell_curves(returns, title='Bell Curves of Returns for Commodity Catego
 #%% Define Portfolio Metrics and additional functions
 
 
+
 # Define a function to calculate the maximum drawdown
+
 def calculate_max_drawdown(returns: pd.Series) -> float:
     cum_returns = (1 + returns).cumprod()
     peaks = cum_returns.cummax()
@@ -438,110 +442,63 @@ def determine_rebalance_periods(dates, frequency):
     :return: A list of tuples, each tuple represents a period (start_index, end_index).
     """
     periods = []
-    trading_days_per_period = {
-        'monthly': 21,
-        'yearly': 252,
-        'six_months': 126
-    }
 
-    if frequency not in trading_days_per_period:
-        raise ValueError("Frequency must be 'monthly', 'yearly', or 'six_months'.")
+    if frequency == 'monthly':
+        current_month = dates[0].month
+        start_index = 0
+        for i, date in enumerate(dates):
+            if date.month != current_month:
+                periods.append((start_index, i - 1))
+                start_index = i
+                current_month = date.month
+        periods.append((start_index, len(dates) - 1))  # add the last period
 
-    period_length = trading_days_per_period[frequency]
-    start_index = 0
+    elif frequency == 'yearly':
+        current_year = dates[0].year
+        start_index = 0
+        for i, date in enumerate(dates):
+            if date.year != current_year:
+                periods.append((start_index, i - 1))
+                start_index = i
+                current_year = date.year
+        periods.append((start_index, len(dates) - 1))  # add the last period
 
-    while start_index < len(dates):
-        end_index = min(start_index + period_length - 1, len(dates) - 1)
-        periods.append((start_index, end_index))
-        start_index = end_index + 1
+    elif frequency == 'six_months':
+        start_index = 0
+        # Calculate the month six months from the start month
+        current_period = (dates[0].year, dates[0].month)
+        for i, date in enumerate(dates):
+            six_months_later = (current_period[0] + (current_period[1] + 6 - 1) // 12, (current_period[1] + 6 - 1) % 12 + 1)
+            if (date.year, date.month) >= six_months_later:
+                periods.append((start_index, i - 1))
+                start_index = i
+                current_period = (date.year, date.month)
+        periods.append((start_index, len(dates) - 1))  # add the last period
 
     return periods
 
 
-#%% Mean Variance Optimization (Maximize Sharpe Ratio)
+#%% Implement 1/N Portfolio
 
+def equally_weighted_portfolios(returns_data: pd.DataFrame, 
+                                num_portfolios: int, 
+                                num_securities: int, 
+                                window_years: int, 
+                                frequency: str,
+                                seed: int,
+                                rebalance_frequency: str = None) -> dict:
 
-def optimize_portfolio(train_data, selected_securities, allow_short_selling, frequency):
-    # Define the constraints - portfolio fully invested
-    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
-
-    # Define the bounds based on short selling allowance
-    bounds = [(-1, 1) if allow_short_selling else (0, 1) for _ in selected_securities]
-
-    # Initial guess for weights (equal weights for all assets)
-    initial_weights = [1. / len(selected_securities)] * len(selected_securities)
-    
-    # Objective function considering transaction costs if allowed
-    def objective_function(weights):
-        return -portfolio_stats(weights, train_data, frequency)['sharpe']
-    
-    # Perform the optimization with constraints
-    result = optimize.minimize(objective_function, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
-
-    # Extract and return optimized weights
-    optimized_weights = pd.Series(data=result.x, index=selected_securities)
-    return optimized_weights
-
-def portfolio_stats(weights, returns_data: pd.DataFrame, frequency: str) -> dict:
-    annualization_factor = {'daily': 252, 'weekly': 52, 'monthly': 12, 'yearly': 1}[frequency]
-    port_return = np.dot(returns_data.mean(), weights) * annualization_factor
-    cov_matrix = returns_data.cov() * annualization_factor
-    port_vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-    sharpe_ratio = port_return / port_vol if port_vol != 0 else float('nan')
-    return {'return': port_return, 'volatility': port_vol, 'sharpe': sharpe_ratio}
-
-
-#%% Performing Portfolio Optimization and Backtest (Mean Variance) - Sharpe
-
-'''
-
-The Optimization Function will have three parts:
-         
-    - Constraints: In this case, our key constraint is that all the portfolio weights should sum to 1;
-    - Bounds: Bounds is going to refer to how much of our portfolio one asset can take up, from 0.0 to 1.0. 0.0 being a 0% position, and 1.0 being a 100% position;
-    - Initializer: Initializer just sets the initial weights of the optimization algorithm so that it has a starting point. Here we will just set them so that each stock takes up an equal percentage of the portfolio
-
-All optimization and minimization functions require some kind of metric to optimize on - usually this means minimizing something. This often involves tradeoffs because even though multi-variables can be considered, typically you can only minimize one score metric. In this example, weâ€™re going to try optimizing on two seperate metrics. The metrics will be:
-    
-    - Sharpe Ratio: Risk adjusted returns. This will create the portfolio with the highest return per unit of incurred risk.
-    
-'''
-
-# Define Markowitz mean variance function approach
-def mean_variance_portfolios(returns_data: pd.DataFrame, 
-                             num_portfolios: int, 
-                             num_securities: int, 
-                             window_years: int, 
-                             frequency: str,  
-                             allow_short_selling: bool,
-                             seed: int,
-                             rebalance_frequency: str = None) -> dict:
-    
-    
     np.random.seed(seed)
-
-    # The function initializes an empty dictionary to store various performance metrics for each generated portfolio.
     portfolios_data = {}
-    
-    # Create a DataFrame to store results for all portfolios
     all_results_dfs = []
     
+    
     # Store the updated weights for each rebalance period
-    mvo_weights_history = {}
-    
-    
-    '''
-    ##############################################################################################################################
-    #                                                     Splitting the Data                                                     #
-    ##############################################################################################################################
-    ''' 
-    
-    for i in tqdm(range(num_portfolios), desc='Generating Portfolios (MVO)'):
-        
+    equal_weights_history = {}
 
+    for i in tqdm(range(num_portfolios), desc='Generating Portfolios (EW)'):
         selected_securities = np.random.choice(list(returns_data.columns), size=num_securities, replace=False).tolist()
-        
-        # Use the frequency parameter to determine the annualization factor
+
         if frequency == 'daily':
             annualization_factor = 252
         elif frequency == 'monthly':
@@ -550,44 +507,15 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
             annualization_factor = 1
         else:
             raise ValueError("Invalid frequency. Options: 'daily', 'weekly', 'monthly', 'yearly'")
-            
-    
-        test_start_index = - window_years * annualization_factor
-        train_data = returns_data.iloc[:test_start_index][selected_securities].dropna()
+        
+        test_start_index = -window_years * annualization_factor
+        train_data = returns_data.iloc[:test_start_index][selected_securities]
         test_data = returns_data.iloc[test_start_index:][selected_securities]
 
-        # Portfolio Optimization
         test_cov_matrix = test_data.cov() * annualization_factor
         
-        
-        '''
-        ##############################################################################################################################
-        #                                                     Rebalancing Period                                                     #
-        ##############################################################################################################################
-         
-        
-        1) Initial Train Data Setup:
-
-        Initially, train_data is set to a portion of returns_data that excludes the most recent window_years of data. This initial training dataset is used 
-        for the first rebalancing period.
-
-        2) Updating Train Data for Each Rebalancing Period:
-
-        Within the rebalancing loop (for period_start, period_end in rebalance_periods), after the portfolio weights are calculated and applied to the 
-        current period's data (period_data), the train data is updated to include the most recent information at that time while discarding older infromation.
-        
-        This is done for each rebalancing window.
-
-
-        3) Implications of Rolling Window Approach:
-
-        The implication of this approach is that each time the portfolio is rebalanced, the training data used for MVO optimization consists of the most 
-        recent historical data available up to the start of the current rebalancing period. 
-
-        '''
-        
         current_portfolio_weights_history = {}
-    
+        
         if rebalance_frequency:
             
             rebalance_periods = determine_rebalance_periods(test_data.index, rebalance_frequency)
@@ -612,7 +540,9 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
                     # Include the new period's data into train_data
                     train_data = pd.concat([train_data, period_data])
                     
-                weights = optimize_portfolio(train_data, selected_securities, allow_short_selling, frequency)
+                
+                weights = np.ones(len(selected_securities)) / len(selected_securities)
+                weights_series = pd.Series(weights, index=selected_securities)
     
                 # Calculate portfolio returns for the period
                 period_returns = period_data.dot(weights)
@@ -625,21 +555,15 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
                 rebalance_date = test_data.index[period_start]
                 
                 current_portfolio_weights_history[rebalance_date] = weights
-            
+
         else:
-            
-            weights = optimize_portfolio(train_data, selected_securities, allow_short_selling, frequency)
+            weights = np.ones(len(selected_securities)) / len(selected_securities)
             portfolio_series = test_data.dot(weights)
             
         # Store the current portfolio's weights history in the main dictionary
         portfolio_name = f'Portfolio_{i + 1}'
-        mvo_weights_history[portfolio_name] = current_portfolio_weights_history
-            
-        '''
-        ##############################################################################################################################
-        #                                                     Performance Metrics                                                    #
-        ##############################################################################################################################
-        ''' 
+        equal_weights_history[portfolio_name] = current_portfolio_weights_history
+        
         
         # Call calculate_portfolio_series_returns to get portfolio series returns
         portfolio_series_returns = calculate_portfolio_series_returns(selected_securities=selected_securities,
@@ -647,8 +571,12 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
                                                                       test_start_index=test_start_index).rename('Returns')
         
         cumulative_returns = (1 + portfolio_series_returns).cumprod().rename('Cumulative Returns')
-        
-        
+          
+        '''
+        ##############################################################################################################################
+        #                                                     Performance Metrics                                                    #
+        ##############################################################################################################################
+        ''' 
         
         # Calculate portfolio returns for the test set
         
@@ -666,17 +594,17 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
         
         annualized_return = (total_periodic_returns_sum / num_periods) * periods_per_year
 
-        # Calculate portfolio volatility for the test set (standard deviation)
+        # Calculate volatility for the test set
         portfolio_volatility_test = np.sqrt(np.dot(weights.T, np.dot(test_cov_matrix, weights))).round(5)
 
-        # Calculate portfolio Sharpe ratio for the test set
-        sharpe_ratio_test = (annualized_return / portfolio_volatility_test).round(5)
+        # Calculate sharpe for the test set
+        sharpe_ratio_test = annualized_return / portfolio_volatility_test
         
         # Calculate portfolio Sortino ratio for the test set
         sortino_ratio_test = round(calculate_sortino_ratio('daily', test_data.dot(weights)), 5)
-
-        # Calculate maximum drawdown for the test set
-        max_drawdown_test = round(calculate_max_drawdown(test_data.dot(weights)), 5)
+        
+        # Calculate max drawdown for the test set
+        max_drawdown_test = calculate_max_drawdown(test_data.dot(weights))
         
         # Calculate downside deviation for the test set
         downside_deviation_test = round(calculate_downside_deviation(test_data.dot(weights)), 5)
@@ -687,7 +615,7 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
         # Calculate cvar for the test set
         cvar_test = round(calculate_cvar(test_data.dot(weights)), 5)
         
-
+        
         '''
         ##############################################################################################################################
         #                                                     Storing Results                                                        #
@@ -696,7 +624,7 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
         
         # Create a new DataFrame for each portfolio
         results_df = pd.DataFrame(columns=['Portfolio', 'Returns', 'Volatility', 'Sharpe Ratio', 
-                                           'Max Drawdown', 'Sortino Ratio', 'Downside Deviation', 'VAR', 'CVAR'])
+                                            'Max Drawdown', 'Sortino Ratio', 'Downside Deviation', 'VAR', 'CVAR'])
 
         
         # Append results to the DataFrame
@@ -719,16 +647,18 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
         all_results_dfs.append(results_df)
 
 
+        
+        cumulative_returns = (1 + portfolio_series_returns).cumprod().rename('Cumulative Returns')
+
         # Store portfolio data in the dictionary
         portfolio_name = f'Portfolio_{i + 1}'
         
         portfolios_data[portfolio_name] = {
             
-            'Weights': weights,
+            'Weights': weights_series,
             'Portfolio Series': cumulative_returns,
             'Portfolio Stats': results_df,
         }
-        
          
     '''
     ##############################################################################################################################
@@ -742,13 +672,10 @@ def mean_variance_portfolios(returns_data: pd.DataFrame,
     # Calculate the median of the final DataFrame
     numeric_columns = final_results_df.select_dtypes(include=np.number).columns
     median_results = final_results_df[numeric_columns].median().to_frame().T
-    median_results['Strategy'] = 'Mean Variance Optimization'
+    median_results['Strategy'] = 'Equal Weighted Portfolio'
     median_results.set_index('Strategy', inplace=True)
     
-    return final_results_df, median_results, portfolios_data, mvo_weights_history
-
-
-
+    return final_results_df, median_results, portfolios_data, equal_weights_history
 
 
 
