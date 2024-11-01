@@ -12,8 +12,6 @@ The project comprises the following notebooks:
 
 Dataset available at: Extracted using the Yahoo Finance API
 
-Brief paper overview at: [Personal Website](https://bernardoraimundo.github.io//portfolio/portfolio-2/) Hopefully Soon!
-
 Paper Available at: Hopefully Soon!
 
 For any inquiries send an email at: braimundo@novaims.unl.pt
