@@ -10,6 +10,6 @@ The project comprises the following notebooks:
 
 Dataset available at: Extracted using the Yahoo Finance API
 
-Paper Available at: Hopefully Soon!
+Paper Available at: [AIS eLibrary](https://aisel.aisnet.org/mcis2024/39/)
 
 For any inquiries send an email at: braimundo@novaims.unl.pt
